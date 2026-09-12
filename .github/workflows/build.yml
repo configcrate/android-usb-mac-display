@@ -1,0 +1,63 @@
+name: Build and test
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  protocol:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node protocol/tests/test_protocol.js
+      - run: node protocol/tests/check_consistency.js
+      - run: printf '#include "protocol/frame.h"\nint main(void){return 0;}\n' | cc -x c -I. -o /tmp/header-check -
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install libusb pkg-config
+      - run: swift build -c release
+        working-directory: macos
+      - run: swift test
+        working-directory: macos
+      - run: |
+          mkdir -p out
+          cp macos/.build/release/usbdisplayctl out/
+          cp README.md docs/TESTING.zh-CN.md out/
+          otool -L out/usbdisplayctl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.os }}-host
+          path: out/
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - run: chmod +x gradlew && ./gradlew :app:testDebugUnitTest :app:assembleDebug :app:lintDebug --no-daemon
+        working-directory: android
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-test-reports
+          path: |
+            android/app/build/reports/
+

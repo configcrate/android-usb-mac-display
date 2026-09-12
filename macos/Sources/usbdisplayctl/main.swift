@@ -1,166 +1,82 @@
 import Foundation
 import CoreGraphics
 import USBDisplayCore
+import Darwin
+import ApplicationServices
 
-/// 命令行入口：`usbdisplayctl` —— 无 GUI，便于快速验证全链路延迟。
-///
-/// 用法：
-///   usbdisplayctl probe                  探测设备与后端可用性
-///   usbdisplayctl run [--width N] ...    启动投屏会话
-///   usbdisplayctl doctor                 环境自检
-
-struct Args {
-    var command = "doctor"
-    var width = 1920
-    var height = 1080
-    var fps = 60
-    var bitrate = 12_000_000
-    var backend = VirtualDisplayBackend.captureOnly
-}
-
-func parseArgs() -> Args {
-    var args = Args()
-    var it = CommandLine.arguments.dropFirst().makeIterator()
-    while let a = it.next() {
-        switch a {
-        case "probe", "run", "doctor":
-            args.command = a
-        case "--width":    args.width = Int(it.next() ?? "") ?? args.width
-        case "--height":   args.height = Int(it.next() ?? "") ?? args.height
-        case "--fps":      args.fps = Int(it.next() ?? "") ?? args.fps
-        case "--bitrate":  args.bitrate = Int(it.next() ?? "") ?? args.bitrate
-        case "--backend":
-            switch it.next() ?? "" {
-            case "virtual": args.backend = .cgVirtualDisplay
-            case "capture": args.backend = .captureOnly
-            case "sck":     args.backend = .screenCaptureKit
-            default: break
-            }
-        case "--help", "-h":
-            printUsage(); exit(0)
-        default:
-            break
-        }
-    }
-    return args
-}
-
-func printUsage() {
+func usage() {
     print("""
-    usbdisplayctl — Mac 端 USB 副屏
-
-    USAGE:
-      usbdisplayctl <command> [options]
-
-    COMMANDS:
-      doctor    环境自检（推荐首次运行）
-      probe     探测 Android 设备与 AOA 支持
-      run       启动投屏会话
-
-    OPTIONS:
-      --width  N       视频宽度，默认 1920
-      --height N       视频高度，默认 1080
-      --fps    N       帧率，默认 60
-      --bitrate N      码率 bps，默认 12000000
-      --backend <name> capture | virtual | sck
-                       capture = 采集主屏（默认，最稳）
-                       virtual = CGVirtualDisplay 真副屏（私有 API）
+    usbdisplayctl — experimental Mac → Android USB display
+    doctor | probe | run [--width N --height N --fps N --bitrate N --backend capture|virtual]
+    Defaults: 1280×720, 30 fps, 8 Mbps, main-screen mirror.
+    virtual: experimental extended desktop using private API. No silent fallback.
+    Requires macOS 13+, libusb, data cable, Android 8+ APK and USB permission.
+    Ctrl-C releases the session. No USB debugging required.
     """)
 }
-
-func doctor() {
-    print("== usbdisplayctl 环境自检 ==\n")
-
-    let os = ProcessInfo.processInfo.operatingSystemVersion
-    print("macOS 版本: \(os.majorVersion).\(os.minorVersion).\(os.patchVersion)")
-
-    let hasVirtual = CGVirtualDisplayBackend.isAvailable
-    print("CGVirtualDisplay 私有 API: \(hasVirtual ? "✅ 可用" : "❌ 不可用")")
-    if hasVirtual {
-        print("   → 可用 --backend virtual 体验真副屏")
-    } else {
-        print("   → 请使用默认 capture 模式（采集主屏）")
-    }
-
-    let displays = activeDisplays()
-    print("当前显示器数量: \(displays.count)")
-    for d in displays {
-        let size = CGDisplayPixelsWide(d)
-        let h = CGDisplayPixelsHigh(d)
-        let hz = CGDisplayCopyDisplayMode(d)?.refreshRate ?? 0
-        print("   displayID=\(d)  \(size)x\(h)@\(Int(hz))Hz")
-    }
-
-    if let dev = AOATransport.findAndroidDevice() {
-        print("Android 设备: ✅ \(dev.manufacturer) \(dev.product)")
-    } else {
-        print("Android 设备: ⚠️ 未检测到（插上手机并确认已信任此电脑）")
-    }
-
-    print("\n常见问题：")
-    print("  · 「未找到 Android 设备」→ 换一根**数据线**（很多线只能充电）")
-    print("  · 「不支持 AOA」→ 部分厂商 ROM 移除了 AOA，可改用 ADB 隧道兜底")
-    print("  · 延迟偏高 → 用 --fps 30 试，确认是否编码器帧率跟不上")
+var options=DisplayLinkSession.Options()
+let arguments=Array(CommandLine.arguments.dropFirst())
+let command=arguments.first ?? "doctor"
+var i=1
+func number(_ value: String) -> Int {
+    guard let n=Int(value) else { fputs("Invalid numeric argument: \(value)\n",stderr); exit(2) }
+    return n
 }
-
-func activeDisplays() -> [CGDirectDisplayID] {
-    var count: UInt32 = 0
-    CGGetActiveDisplayList(0, nil, &count)
-    var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
-    CGGetActiveDisplayList(count, &ids, &count)
-    return Array(ids.prefix(Int(count)))
-}
-
-func probe() {
-    if let dev = AOATransport.findAndroidDevice() {
-        print("找到设备: \(dev.manufacturer) \(dev.product)")
-        print("  vendorID: 0x\(String(dev.vendorID, radix: 16))")
-        print("  productID: 0x\(String(dev.productID, radix: 16))")
-    } else {
-        print("未找到 Android 设备")
+while i<arguments.count {
+    let key=arguments[i]
+    if key=="--help" || key=="-h" { usage(); exit(0) }
+    guard i+1<arguments.count else { fputs("Missing argument for \(key)\n",stderr); exit(2) }
+    let value=arguments[i+1]
+    switch key {
+    case "--width": options.width=number(value)
+    case "--height": options.height=number(value)
+    case "--fps": options.fps=number(value)
+    case "--bitrate": options.bitrateBps=number(value)
+    case "--backend":
+        switch value {
+        case "capture","sck": options.backend = .captureOnly
+        case "virtual": options.backend = .cgVirtualDisplay
+        default: fputs("Unknown backend\n",stderr); exit(2)
+        }
+    default: fputs("Unknown option: \(key)\n",stderr); exit(2)
     }
-    print("CGVirtualDisplay 可用: \(CGVirtualDisplayBackend.isAvailable)")
+    i += 2
 }
-
-// MARK: - main
-
-let args = parseArgs()
-switch args.command {
-case "doctor":
-    doctor()
-
-case "probe":
-    probe()
-
+guard (320...3840).contains(options.width), (240...2160).contains(options.height),
+    options.width%2==0, options.height%2==0, (1...60).contains(options.fps),
+    (1_000_000...40_000_000).contains(options.bitrateBps) else {
+    fputs("Use even dimensions 320–3840 × 240–2160, fps 1–60, bitrate 1000000–40000000.\n",stderr); exit(2)
+}
+switch command {
+case "doctor","probe":
+    print("macOS: \(ProcessInfo.processInfo.operatingSystemVersionString)")
+    print("Virtual API available: \(CGVirtualDisplayBackend.isAvailable) (not a hardware test)")
+    print("Screen Recording allowed: \(CGPreflightScreenCaptureAccess())")
+    print("Accessibility allowed: \(AXIsProcessTrusted())")
+    if let d=AOATransport.findAndroidDevice() { print("USB candidate \(d.manufacturer):\(d.product)") }
+    else { print("No unique Android candidate. Connect exactly one phone using a data cable.") }
 case "run":
-    let options: DisplayLinkSession.Options = {
-        let o = DisplayLinkSession.Options()
-        var o2 = o
-        o2.width = args.width
-        o2.height = args.height
-        o2.fps = args.fps
-        o2.bitrateBps = args.bitrate
-        o2.backend = args.backend
-        return o2
-    }()
-
-    let session = DisplayLinkSession(options: options)
-
-    // Ctrl-C 优雅退出，避免虚拟显示器残留
-    signal(SIGINT) { _ in
-        FileHandle.standardError.write("\n收到中断信号，正在退出...\n".data(using: .utf8)!)
-        exit(0)
-    }
-
-    do {
-        try session.start()
-        session.run()
-    } catch {
-        FileHandle.standardError.write(
-            "启动失败: \(error.localizedDescription)\n".data(using: .utf8)!)
+    guard CGPreflightScreenCaptureAccess() else {
+        CGRequestScreenCaptureAccess()
+        fputs("Allow Screen Recording for your terminal in macOS Settings, then restart the terminal and rerun.\n",stderr)
         exit(1)
     }
-
-default:
-    printUsage()
+    let session=DisplayLinkSession(options:options)
+    signal(SIGINT,SIG_IGN); signal(SIGTERM,SIG_IGN)
+    let interrupt=DispatchSource.makeSignalSource(signal:SIGINT,queue:.main)
+    let terminate=DispatchSource.makeSignalSource(signal:SIGTERM,queue:.main)
+    interrupt.setEventHandler { session.requestStop() }
+    terminate.setEventHandler { session.requestStop() }
+    interrupt.resume(); terminate.resume()
+    DispatchQueue.global(qos:.userInteractive).async {
+        var status: Int32=0
+        do { try session.start(); session.run(); if session.failure != nil { status=1 } }
+        catch { fputs("Start failed: \(error.localizedDescription)\n",stderr); status=1 }
+        session.stop()
+        exit(status)
+    }
+    // Required by WindowServer / SCK / native virtual-display callbacks.
+    RunLoop.main.run()
+case "--help","-h": usage()
+default: usage(); exit(2)
 }

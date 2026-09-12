@@ -31,6 +31,8 @@ die() { printf '%s✗%s %s\n' "$R" "$N" "$1" >&2; exit 1; }
 step() { printf '\n%s%s%s\n' "$B" "$1" "$N"; }
 
 [ "$(uname -s)" = "Darwin" ] || die "本脚本只能在 macOS 上运行（Mac 是 USB Host 侧）"
+command -v pkg-config >/dev/null 2>&1 || die "先安装依赖：brew install libusb pkg-config"
+pkg-config --exists libusb-1.0 || die "缺少 libusb：brew install libusb pkg-config"
 command -v swift >/dev/null 2>&1 || die "找不到 swift。先装 Xcode Command Line Tools：
     xcode-select --install
    然后重跑本脚本"
@@ -43,7 +45,7 @@ if command -v adb >/dev/null 2>&1; then
 elif system_profiler SPUSBDataType 2>/dev/null | grep -Eiq 'vendor_id: 0x(18d1|04e8|2717|2a70|12d1|22d9|2d95|0bb4|05c6|2e04|0e8d|0fce|1ebf)'; then
   printf '  %s✓%s 检测到 Android 手机已插上\n' "$G" "$N"
 else
-  printf '  %s!%s 没看到手机。不着急，先把 Mac 端跑起来也行；插线后会自动连。\n' "$Y" "$N"
+  printf '  %s!%s 没看到手机。请先插入数据线；启动失败后需处理原因并重跑。\n' "$Y" "$N"
   printf '  %s  排查：换数据线（很多线只能充电）→ 手机解锁确认授权 → 换 USB 口（别用扩展坞充电口）%s\n' "$DIM" "$N"
 fi
 printf '  %s如需完整体检（并自动补装缺失工具）：bash macos/scripts/usbdisplay-doctor.sh%s\n' "$DIM" "$N"

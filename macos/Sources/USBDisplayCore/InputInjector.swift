@@ -89,7 +89,7 @@ public final class InputInjector {
 
     private func postMove(to point: CGPoint) {
         guard let move = CGEvent(mouseEventSource: nil,
-                                 mouseType: .mouseMoved,
+                                 mouseType: isPointerDown && emulateClick ? .leftMouseDragged : .mouseMoved,
                                  mouseCursorPosition: point,
                                  mouseButton: .left) else { return }
         move.post(tap: .cghidEventTap)
@@ -110,5 +110,9 @@ public final class InputInjector {
         guard let ev = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: down) else { return }
         ev.flags = flags
         ev.post(tap: .cghidEventTap)
+    }
+    public func releasePointer() {
+        if isPointerDown && emulateClick { postButton(.leftMouseUp, at: lastPoint) }
+        isPointerDown = false
     }
 }

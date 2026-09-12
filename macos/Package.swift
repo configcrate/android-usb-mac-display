@@ -11,13 +11,14 @@ let package = Package(
         .executable(name: "usbdisplayctl", targets: ["usbdisplayctl"]),
     ],
     targets: [
+        .systemLibrary(name: "CLibusb", pkgConfig: "libusb-1.0", providers: [.brew(["libusb"])]),
+        .target(name: "CUSBDisplay", dependencies: ["CLibusb"],
+                cSettings: [.unsafeFlags(["-fobjc-arc"])],
+                linkerSettings: [.linkedFramework("Foundation"), .linkedFramework("CoreGraphics")]),
         .target(
             name: "USBDisplayCore",
+            dependencies: ["CUSBDisplay"],
             path: "Sources/USBDisplayCore",
-            swiftSettings: [
-                // ScreenCaptureKit 的 SCStreamOutput 是 @objc 协议，需要与 ObjC 互操作
-                .unsafeFlags(["-enable-experimental-feature", "StrictConcurrency"]),
-            ],
             linkerSettings: [
                 .linkedFramework("CoreGraphics"),
                 .linkedFramework("CoreMedia"),
@@ -33,5 +34,6 @@ let package = Package(
             dependencies: ["USBDisplayCore"],
             path: "Sources/usbdisplayctl"
         ),
+        .testTarget(name: "USBDisplayCoreTests", dependencies: ["USBDisplayCore"]),
     ]
 )

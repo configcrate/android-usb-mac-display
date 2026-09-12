@@ -10,6 +10,7 @@
 
     <dev.configcrate.usbdisplay.render.VideoSurfaceView
         android:id="@+id/video_surface"
+        android:layout_gravity="center"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 

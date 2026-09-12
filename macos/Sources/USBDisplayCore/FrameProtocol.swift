@@ -110,7 +110,7 @@ public struct TouchEvent {
     public func point(in size: CGSize) -> CGPoint {
         let fx = min(max(CGFloat(x) / 65535.0, 0), 1)
         let fy = min(max(CGFloat(y) / 65535.0, 0), 1)
-        return CGPoint(x: fx * size.width, y: fy * size.height)
+        return CGPoint(x: fx * max(0, size.width - 1), y: fy * max(0, size.height - 1))
     }
 }
 
@@ -195,6 +195,7 @@ public struct PeerStats {
 public final class FrameFramer {
     private var seq: UInt32 = 0
     private let sink: FrameSink
+    private let lock = NSRecursiveLock()
 
     public init(sink: FrameSink) {
         self.sink = sink
@@ -202,6 +203,7 @@ public final class FrameFramer {
 
     @discardableResult
     public func sendVideo(_ nalUnits: [UInt8], keyframe: Bool, timestampUs: UInt64) -> UInt32 {
+        lock.lock(); defer { lock.unlock() }
         let flags: UInt16 = keyframe ? USBD.flagKeyframe : 0
         let s = seq
         seq &+= 1
@@ -212,6 +214,7 @@ public final class FrameFramer {
     }
 
     public func sendConfig(_ config: StreamConfig) {
+        lock.lock(); defer { lock.unlock() }
         let payload = config.encode()
         let header = FrameHeader(type: USBD.typeConfig, seq: seq,
                                  payloadLength: UInt32(payload.count)).encode()
@@ -220,6 +223,7 @@ public final class FrameFramer {
     }
 
     public func sendPing(timestampUs: UInt32) {
+        lock.lock(); defer { lock.unlock() }
         var v = timestampUs.littleEndian
         var payload = [UInt8]()
         withUnsafeBytes(of: &v) { payload = Array($0) }
@@ -230,6 +234,7 @@ public final class FrameFramer {
     }
 
     public func sendStats(_ stats: PeerStats) {
+        lock.lock(); defer { lock.unlock() }
         let payload = stats.encode()
         let header = FrameHeader(type: USBD.typeStats, seq: seq,
                                  payloadLength: UInt32(payload.count)).encode()
@@ -238,21 +243,13 @@ public final class FrameFramer {
     }
 
     private func sendFragmented(header: [UInt8], payload: [UInt8]) {
-        if payload.count + USBD.headerSize <= USBD.maxTransfer {
-            sink.write(header + payload)
-            return
-        }
-        // 大帧分段：第一段带头，后续段是裸续传数据，接收端按 payload_len 累计。
-        var offset = 0
-        var first = true
-        let chunk = USBD.maxTransfer - USBD.headerSize
-        while offset < payload.count {
-            let end = min(offset + chunk, payload.count)
-            let slice = Array(payload[offset..<end])
-            sink.write(first ? (header + slice) : slice)
-            first = false
-            offset = end
-        }
+        sink.write(header + payload)
+    }
+    public func sendMessage(type: UInt8, payload: [UInt8]) {
+        lock.lock(); defer { lock.unlock() }
+        let header = FrameHeader(type: type, seq: seq, payloadLength: UInt32(payload.count)).encode()
+        seq &+= 1
+        sink.write(header + payload)
     }
 }
 

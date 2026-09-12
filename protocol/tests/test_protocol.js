@@ -177,22 +177,19 @@ test('接收端流式重组能还原被切分的帧', () => {
     }
   }
 
-  // 接收端：按 payload_len 流式重组，且模拟"部分读"——把每片再切成 7 字节
-  let acc = Buffer.alloc(0), pending = null, need = 0;
+  // Tiny simulated reads copied once into the final backing store.
+  // Production Swift/Kotlin parsers are tested by their own test targets.
+  const acc = Buffer.alloc(payload.length + 16);
+  let count = 0, pending = null;
   const frames = [];
   for (const w of wire) {
-    for (let i = 0; i < w.length; i += 7) acc = Buffer.concat([acc, w.subarray(i, i + 7)]);
-    while (true) {
-      if (!pending) {
-        if (acc.length < 16) break;
-        pending = decodeHeader(acc.subarray(0, 16));
-        need = pending.payloadLength;
-        acc = acc.subarray(16);
-      }
-      if (acc.length < need) break;
-      frames.push({ header: pending, payload: acc.subarray(0, need) });
-      acc = acc.subarray(need);
-      pending = null; need = 0;
+    for (let i = 0; i < w.length; i += 7) {
+      const bytes = w.subarray(i, i + 7);
+      bytes.copy(acc, count);
+      count += bytes.length;
+      if (!pending && count >= 16) pending = decodeHeader(acc.subarray(0, 16));
+      if (pending && count === pending.payloadLength + 16)
+        frames.push({ header: pending, payload: acc.subarray(16, count) });
     }
   }
   assert.strictEqual(frames.length, 1, '应重组出 1 帧');

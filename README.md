@@ -30,6 +30,7 @@ bash macos/scripts/usbdisplay-run.sh
 4. 单指操控另需 Mac 辅助功能权限。按 Ctrl-C 退出。
 
 AOA 不要求开启 USB 调试。只连接一台 Android，并退出可能占用 USB 的文件传输应用。连接失败后处理原因并重新运行。
+设备识别检查 USB 接口以排除同品牌 SSD/键鼠；找不到手机时，解锁并选择“文件传输 / MTP”后重试。
 
 详细测试与故障回报：[TESTING.zh-CN.md](docs/TESTING.zh-CN.md)。
 

@@ -7,6 +7,7 @@
 - Mac：macOS 13 或以上，Xcode Command Line Tools、Homebrew。
 - Android 8 或以上，支持 USB Accessory / AOA 的手机或平板。
 - 可传数据的 USB 线。首次只接一台 Android，退出 Android File Transfer / OpenMTP 等占用 USB 的软件。
+- 程序同时检查 USB 接口，不仅按品牌识别，避免误操作同品牌 SSD/键鼠。若找不到手机，解锁并在手机 USB 选项选择“文件传输 / MTP”后重试；不要求 USB 调试。
 - AOA 不要求 USB 调试。若厂商 ROM 不支持 AOA，开启调试也不能保证解决。
 
 ## 安装与启动
@@ -85,4 +86,3 @@ USB 系统报告可能包含序列号；公开提交前删掉序列号、用户�
 还没有开发者签名、公证 Mac 安装器或正式 APK 签名。厂商 AOA 兼容性、USB 设备所有权、私有虚拟显示器行为与性能需要真机确认。程序不修改系统驱动、无服务器、无账号、无遥测，但会采集并通过 USB 发送屏幕；只连接自己信任的设备。
 
 Built by [ConfigCrate](https://configcrate.com/).
-

@@ -15,13 +15,38 @@ struct CCUSB {
 static int accessory(uint16_t vid, uint16_t pid) {
     return vid == 0x18d1 && (pid == 0x2d00 || pid == 0x2d01);
 }
-static int candidate(uint16_t vid, uint16_t pid) {
+static int vendor_candidate(uint16_t vid, uint16_t pid) {
     static const uint16_t vendors[] = {0x18d1,0x04e8,0x2717,0x2a70,0x12d1,0x22d9,
         0x2d95,0x0bb4,0x05c6,0x2e04,0x0e8d,0x0fce,0x1ebf};
     if (accessory(vid,pid)) return 1;
     for (size_t i=0; i<sizeof(vendors)/sizeof(*vendors); ++i)
         if (vid==vendors[i]) return 1;
     return 0;
+}
+// A vendor ID alone is not proof of a phone (e.g. Samsung SSDs).
+// Inspect descriptors before issuing any vendor request. Unknown devices
+// remain untouched; selecting File Transfer on the phone exposes MTP.
+static int candidate(libusb_device *device, const struct libusb_device_descriptor *d) {
+    if (accessory(d->idVendor,d->idProduct)) return 1;
+    if (!vendor_candidate(d->idVendor,d->idProduct)) return 0;
+    struct libusb_config_descriptor *config=NULL;
+    if (libusb_get_config_descriptor(device,0,&config)<0) return 0;
+    int match=config->bNumInterfaces==0 && d->bDeviceClass==0;
+    int unsafe=0;
+    for (int i=0;i<config->bNumInterfaces;++i) {
+        const struct libusb_interface *interface=&config->interface[i];
+        for (int j=0;j<interface->num_altsetting;++j) {
+            const struct libusb_interface_descriptor *a=&interface->altsetting[j];
+            // Reject mass-storage / HID / audio devices, including composite ones.
+            if (a->bInterfaceClass==8 || a->bInterfaceClass==3 || a->bInterfaceClass==1) unsafe=1;
+            if (a->bInterfaceClass==6 ||
+                (a->bInterfaceClass==0xff && a->bInterfaceSubClass==0x42 && a->bInterfaceProtocol==1) ||
+                (a->bInterfaceClass==0xff && a->bInterfaceSubClass==0xff && a->bInterfaceProtocol==0))
+                match=1;
+        }
+    }
+    libusb_free_config_descriptor(config);
+    return match && !unsafe;
 }
 CCUSB *cc_usb_create(void) {
     CCUSB *u=calloc(1,sizeof(*u));
@@ -54,7 +79,7 @@ int cc_usb_probe(uint16_t *vendor,uint16_t *product) {
     int found=0;
     for (ssize_t i=0;i<n;++i) {
         struct libusb_device_descriptor d;
-        if (!libusb_get_device_descriptor(list[i],&d) && candidate(d.idVendor,d.idProduct)) {
+        if (!libusb_get_device_descriptor(list[i],&d) && candidate(list[i],&d)) {
             *vendor=d.idVendor; *product=d.idProduct; ++found;
         }
     }
@@ -104,7 +129,7 @@ int cc_usb_open(CCUSB *u) {
     struct libusb_device_descriptor desc={0};
     for (ssize_t i=0;i<count;++i) {
         struct libusb_device_descriptor d;
-        if (!libusb_get_device_descriptor(list[i],&d) && candidate(d.idVendor,d.idProduct)) {
+        if (!libusb_get_device_descriptor(list[i],&d) && candidate(list[i],&d)) {
             selected=list[i]; desc=d; ++candidates;
         }
     }

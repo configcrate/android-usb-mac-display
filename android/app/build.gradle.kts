@@ -12,8 +12,8 @@ android {
         // minSdk 26：MediaFormat.KEY_OPERATING_RATE / 现代 MediaCodec 行为的基础线
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.0-alpha.1"
     }
 
     buildTypes {

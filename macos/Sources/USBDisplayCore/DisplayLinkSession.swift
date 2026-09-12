@@ -51,7 +51,8 @@ public final class DisplayLinkSession {
                 self.lock.lock(); let active=self.running; self.lock.unlock()
                 if active { self.framer.sendVideo(bytes,keyframe:key,timestampUs:ts) }
             }
-            lock.lock(); running=true; lock.unlock()
+            lock.lock(); running = !cancelled; let proceed=running; lock.unlock()
+            if !proceed { stop(); return }
             transport.start()
             let params=VirtualDisplayParams(width:options.width,height:options.height,refreshRate:options.fps)
             if options.backend == .cgVirtualDisplay {

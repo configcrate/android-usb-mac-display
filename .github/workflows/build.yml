@@ -15,6 +15,7 @@ jobs:
           node-version: '22'
       - run: node protocol/tests/test_protocol.js
       - run: node protocol/tests/check_consistency.js
+      - run: bash -n macos/scripts/*.sh
       - run: printf '#include "protocol/frame.h"\nint main(void){return 0;}\n' | cc -x c -I. -o /tmp/header-check -
   macos:
     strategy:
@@ -60,4 +61,3 @@ jobs:
           name: android-test-reports
           path: |
             android/app/build/reports/
-

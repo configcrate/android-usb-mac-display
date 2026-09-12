@@ -15,6 +15,7 @@ import android.os.Looper
 import android.view.SurfaceHolder
 import android.view.WindowManager
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import dev.configcrate.usbdisplay.decode.LowLatencyVideoDecoder
 import dev.configcrate.usbdisplay.input.TouchForwarder
 import dev.configcrate.usbdisplay.render.VideoSurfaceView
@@ -73,8 +74,7 @@ class UsbDisplayActivity : Activity() {
             addAction(UsbManager.ACTION_USB_ACCESSORY_ATTACHED)
             addAction(UsbManager.ACTION_USB_ACCESSORY_DETACHED)
         }
-        if (Build.VERSION.SDK_INT >= 33) registerReceiver(receiver, filter, RECEIVER_NOT_EXPORTED)
-        else registerReceiver(receiver, filter)
+        ContextCompat.registerReceiver(this, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
         handle(intent)
     }
     private fun getAccessory(intent: Intent?): UsbAccessory? =

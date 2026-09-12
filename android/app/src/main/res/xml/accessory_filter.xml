@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  只匹配本项目的 accessory，避免与 Android Auto 等争抢设备。
+  这些值必须与 Mac 侧 AOA SEND_STRING 发送的内容一致
+  （见 macos/Sources/USBDisplayCore/AOATransport.swift）。
+-->
+<resources>
+    <usb-accessory
+        manufacturer="ConfigCrate"
+        model="USB Display"
+        version="1.0" />
+</resources>

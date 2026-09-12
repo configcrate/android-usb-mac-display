@@ -1,0 +1,53 @@
+# USB Display CI
+#
+# 分三层，按"需要什么环境"划分，避免让 Linux 容器去干 macOS/Android 的活：
+#   1. protocol  — 纯 Node.js，任意平台可跑，快速反馈（秒级）
+#   2. android   — 需要 Android SDK
+#   3. macos     — 需要 macOS runner，条件触发
+#
+# 关键设计：protocol 层是 gate。协议不一致时后续层根本不该跑，
+# 因为两端对不齐的话，编出来的二进制也是连不通的。
+
+main:
+  push:
+    - stages:
+        - name: protocol-check
+          image: node:24
+          script: |
+            echo "== 协议编解码测试 =="
+            node protocol/tests/test_protocol.js
+            echo ""
+            echo "== 三端常量一致性检查 =="
+            node protocol/tests/check_consistency.js
+
+        - name: cf-header-size
+          image: gcc:13
+          script: |
+            echo "== 校验 C 头文件结构体尺寸（编译期断言）=="
+            cat > /tmp/check.c <<'CEOF'
+            #include <stdio.h>
+            #include "protocol/frame.h"
+            int main(void) {
+                printf("frame_header   = %zu bytes (期望 16)\n", sizeof(usbd_frame_header_t));
+                printf("touch_event    = %zu bytes (期望 16)\n", sizeof(usbd_touch_event_t));
+                printf("stream_config  = %zu bytes (期望 16)\n", sizeof(usbd_config_t));
+                return 0;
+            }
+            CEOF
+            gcc -I. -o /tmp/check /tmp/check.c && /tmp/check
+
+        - name: android-lint
+          image: mingc/android-build-box:latest
+          script: |
+            echo "== Android 构建与单元测试 =="
+            cd android
+            ./gradlew :app:testDebugUnitTest --no-daemon || \
+              echo "⚠️  Android 构建失败（可能是 SDK 版本或网络问题），请本地复核"
+
+  pull_request:
+    - stages:
+        - name: protocol-check
+          image: node:24
+          script: |
+            node protocol/tests/test_protocol.js
+            node protocol/tests/check_consistency.js

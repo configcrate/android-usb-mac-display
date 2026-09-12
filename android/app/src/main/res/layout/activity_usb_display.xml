@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  全屏视频 + 左上角状态浮层。
+  用 FrameLayout 而非 ConstraintLayout：层级越浅，SurfaceFlinger 合成越快。
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/black">
+
+    <dev.configcrate.usbdisplay.render.VideoSurfaceView
+        android:id="@+id/video_surface"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <TextView
+        android:id="@+id/status_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_margin="12dp"
+        android:padding="8dp"
+        android:background="#88000000"
+        android:textColor="#FFFFFF"
+        android:textSize="12sp"
+        android:fontFamily="monospace"
+        android:lineSpacingExtra="2dp"
+        android:text="等待 Mac 连接…" />
+
+</FrameLayout>

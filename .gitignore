@@ -1,0 +1,20 @@
+# macOS / Swift
+macos/.build/
+macos/.swiftpm/
+*.xcodeproj
+*.xcworkspace
+
+# Android / Gradle
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.apk
+*.aab
+*.keystore
+
+# 编辑器
+.idea/
+.vscode/
+*.iml
+.DS_Store

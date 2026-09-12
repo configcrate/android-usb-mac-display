@@ -12,6 +12,7 @@ public final class AOATransport: FrameSink, FrameSource {
     public weak var delegate: FrameSourceDelegate?
     private let stateLock = NSLock()
     private let writeLock = NSLock()
+    private let readerGroup = DispatchGroup()
     private var connected = false
     private var readerStarted = false
     private let usb: OpaquePointer?
@@ -62,11 +63,11 @@ public final class AOATransport: FrameSink, FrameSource {
     public func start() {
         stateLock.lock()
         guard connected, !readerStarted else { stateLock.unlock(); return }
-        readerStarted = true; stateLock.unlock()
+        readerStarted = true; readerGroup.enter(); stateLock.unlock()
         DispatchQueue(label: "dev.configcrate.usbdisplay.read", qos: .userInteractive).async { self.readLoop() }
     }
     private func readLoop() {
-        defer { stateLock.lock(); readerStarted = false; stateLock.unlock() }
+        defer { stateLock.lock(); readerStarted = false; stateLock.unlock(); readerGroup.leave() }
         guard let usb else { return }
         var chunk = [UInt8](repeating: 0, count: 64 * 1024)
         let parser = FrameStreamParser()
@@ -92,5 +93,6 @@ public final class AOATransport: FrameSink, FrameSource {
     public func stop() {
         stateLock.lock(); connected = false; stateLock.unlock()
         if let usb { cc_usb_close(usb) }
+        _ = readerGroup.wait(timeout: .now() + 5)
     }
 }

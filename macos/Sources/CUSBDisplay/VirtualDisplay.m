@@ -4,18 +4,18 @@
 #include <stdio.h>
 // Typed declarations; runtime class lookup avoids linking private class symbols.
 @interface CCDescriptor : NSObject
-@property NSString *name;
+@property(retain) NSString *name;
 @property unsigned int maxPixelsWide,maxPixelsHigh,vendorID,productID,serialNum;
 @property CGSize sizeInMillimeters;
-@property dispatch_queue_t queue;
+@property(retain) dispatch_queue_t queue;
 @property(copy) void (^terminationHandler)(id,id);
 @end
 @interface CCMode : NSObject
-- (instancetype)initWithWidth:(unsigned int)width height:(unsigned int)height refreshRate:(double)rate;
+- (instancetype)initWithWidth:(NSUInteger)width height:(NSUInteger)height refreshRate:(CGFloat)rate;
 @end
 @interface CCSettings : NSObject
 @property unsigned int hiDPI;
-@property NSArray *modes;
+@property(retain) NSArray *modes;
 @end
 @interface CCDisplay : NSObject
 - (instancetype)initWithDescriptor:(id)descriptor;

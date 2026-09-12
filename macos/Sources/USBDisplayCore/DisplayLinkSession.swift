@@ -29,6 +29,7 @@ public final class DisplayLinkSession {
     private var pingToken: UInt32=0
     private var pingSent: UInt64=0
     private var stopped=false
+    private var cancelled=false
     private var currentBitrate: Int
     private var previousDrops: UInt32=0
     public private(set) var failure: Error?
@@ -41,6 +42,8 @@ public final class DisplayLinkSession {
     public func start() throws {
         do {
             try transport.handshake { self.log($0) }
+            lock.lock(); let cancelledAtStart=cancelled; lock.unlock()
+            if cancelledAtStart { stop(); return }
             transport.delegate=self
             try encoder.start()
             encoder.onEncodedFrame={ [weak self] bytes,key,ts in
@@ -60,6 +63,10 @@ public final class DisplayLinkSession {
             } else {
                 let id=CGMainDisplayID()
                 let capture=ScreenCapturer(displayID:id,params:params) { [weak self] pb,ts in self?.captured(pb,ts) }
+                capture.onError={ [weak self] error in
+                    guard let self else { return }
+                    self.frameSource(self.transport,didFail:error)
+                }
                 capturer=capture
                 try capture.start()
                 displayID=id
@@ -122,7 +129,7 @@ public final class DisplayLinkSession {
             log("Bitrate: \(target/1_000_000) Mbps")
         }
     }
-    public func requestStop() { lock.lock(); running=false; lock.unlock() }
+    public func requestStop() { lock.lock(); cancelled=true; running=false; lock.unlock() }
     public func stop() {
         lock.lock()
         if stopped { lock.unlock(); return }

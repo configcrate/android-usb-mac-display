@@ -103,6 +103,7 @@ class LowLatencyVideoDecoder(private val surface: Surface) {
             }
         } catch (_: IllegalStateException) { failed = true }
     }
+    @Synchronized fun needsRestart(): Boolean = failed
     @Synchronized fun stats(): PeerStats {
         val times = durations.sorted()
         return PeerStats(decodeUs = if (times.isEmpty()) 0 else times[times.size / 2],

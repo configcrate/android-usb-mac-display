@@ -43,7 +43,7 @@ class UsbDisplayActivity : Activity() {
     @Volatile private var rttUs = 0L
     @Volatile private var waitingIDR = true
     @Volatile private var lastRequestUs = 0L
-    private var destroyed = false
+    @Volatile private var destroyed = false
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
@@ -188,6 +188,10 @@ class UsbDisplayActivity : Activity() {
                 token = (token + 1) and 0xffffffffL
                 pingSent = System.nanoTime() / 1000
                 t.sendPing(token)
+                if (decoder?.needsRestart() == true) {
+                    releaseDecoder()
+                    config?.let { buildDecoder(it, video.holder) }
+                }
                 val d = decoder
                 val stats = d?.stats() ?: PeerStats()
                 t.sendStats(stats.copy(rttUs = rttUs))

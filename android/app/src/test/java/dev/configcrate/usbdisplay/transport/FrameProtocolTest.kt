@@ -170,43 +170,14 @@ class FrameProtocolTest {
         }
         assertTrue(wire.all { it.size <= max })
 
-        // 接收端：模拟部分读（每 7 字节一次）
-        var acc = ByteArray(0)
-        var pending: FrameHeader? = null
-        var need = 0
+        val parser = FrameStreamParser()
         val frames = mutableListOf<Pair<FrameHeader, ByteArray>>()
-
         for (w in wire) {
             var i = 0
             while (i < w.size) {
-                val n = minOf(7, w.size - i)
-                acc += w.copyOfRange(i, i + n)
-                i += n
+                parser.append(w.copyOfRange(i, minOf(i + 7, w.size))) { h, p -> frames.add(h to p) }
+                i += 7
             }
-            var consumed = 0
-            var frameDone = false
-            // 注意：不要在 inline lambda（这里的 run {}）里用 break/continue，
-            // 那是实验特性，Kotlin 1.9 需要额外开编译器 flag。这里用布尔哨兵表达。
-            while (!frameDone) {
-                if (pending == null) {
-                    if (acc.size - consumed < USBD.HEADER_SIZE) break
-                    val h = FrameHeader.decode(acc, consumed)
-                    if (h == null) {
-                        // 头无效：跳一个字节重新同步
-                        consumed += 1
-                        continue
-                    }
-                    pending = h
-                    need = h.payloadLength
-                    consumed += USBD.HEADER_SIZE
-                }
-                if (acc.size - consumed < need) break
-                frames.add(pending to acc.copyOfRange(consumed, consumed + need))
-                consumed += need
-                pending = null
-                need = 0
-            }
-            acc = if (consumed >= acc.size) ByteArray(0) else acc.copyOfRange(consumed, acc.size)
         }
 
         assertEquals(1, frames.size)

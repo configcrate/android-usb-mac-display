@@ -2,11 +2,15 @@
 #
 # 分三层，按"需要什么环境"划分，避免让 Linux 容器去干 macOS/Android 的活：
 #   1. protocol  — 纯 Node.js，任意平台可跑，快速反馈（秒级）
-#   2. android   — 需要 Android SDK
+#   2. android   — 需要 Android SDK，跑单元测试 + 产出可下载的 debug APK
 #   3. macos     — 需要 macOS runner，条件触发
 #
 # 关键设计：protocol 层是 gate。协议不一致时后续层根本不该跑，
 # 因为两端对不齐的话，编出来的二进制也是连不通的。
+#
+# 手机端目前没有上架应用商店，用户拿 APK 的渠道就是这里的产物，
+# 所以 android-apk / upload-apk 不是"顺带"，而是分发链路的一部分
+# （安装步骤见 docs/00-quickstart.md 第 3 步）。
 
 main:
   push:
@@ -36,13 +40,41 @@ main:
             CEOF
             gcc -I. -o /tmp/check /tmp/check.c && /tmp/check
 
-        - name: android-lint
+        - name: android-test
           image: mingc/android-build-box:latest
           script: |
-            echo "== Android 构建与单元测试 =="
+            echo "== Android 单元测试 =="
             cd android
-            ./gradlew :app:testDebugUnitTest --no-daemon || \
-              echo "⚠️  Android 构建失败（可能是 SDK 版本或网络问题），请本地复核"
+            ./gradlew :app:testDebugUnitTest --no-daemon
+
+        # 产出手机端 APK，供直接下载安装。放在当前 commit 的附件里，
+        # 在流水线详情页 / commit 页面看到 "app-debug.apk" 即可下载。
+        - name: android-apk
+          image: mingc/android-build-box:latest
+          script: |
+            set -e
+            echo "== 构建手机端 APK =="
+            cd android
+            ./gradlew :app:assembleDebug --no-daemon
+
+            APK=$(find app/build/outputs/apk/debug -name '*.apk' | head -1)
+            if [ -z "$APK" ]; then
+              echo "✗ 未生成 APK"
+              exit 1
+            fi
+            mkdir -p "$CNB_BUILD_WORKSPACE/apk-out"
+            cp "$APK" "$CNB_BUILD_WORKSPACE/apk-out/app-debug.apk"
+            echo "✓ APK 已产出：$(du -h "$CNB_BUILD_WORKSPACE/apk-out/app-debug.apk" | cut -f1)"
+            echo ""
+            echo "安装方法：下载本产物的 app-debug.apk → 传到手机点开安装"
+            echo "或已装 adb：adb install -r app-debug.apk"
+            echo "详见 docs/00-quickstart.md 第 3 步"
+
+        - name: upload-apk
+          image: cnbcool/attachments:latest
+          settings:
+            attachments:
+              - "$CNB_BUILD_WORKSPACE/apk-out/app-debug.apk"
 
   pull_request:
     - stages:

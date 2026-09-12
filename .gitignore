@@ -9,6 +9,10 @@ android/.gradle/
 android/build/
 android/app/build/
 android/local.properties
+
+# Android 构建产物（gradlew/gradle-wrapper.* 必须入库，不要忽略）
+*.hprof
+android/.kotlin/
 *.apk
 *.aab
 *.keystore

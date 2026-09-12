@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 图标底色：偏冷的深蓝灰，和"显示器/技术工具"的调性一致 -->
+    <color name="ic_launcher_background">#1B2733</color>
+</resources>

@@ -184,16 +184,24 @@ class FrameProtocolTest {
                 i += n
             }
             var consumed = 0
-            while (true) {
+            var frameDone = false
+            // 注意：不要在 inline lambda（这里的 run {}）里用 break/continue，
+            // 那是实验特性，Kotlin 1.9 需要额外开编译器 flag。这里用布尔哨兵表达。
+            while (!frameDone) {
                 if (pending == null) {
                     if (acc.size - consumed < USBD.HEADER_SIZE) break
-                    val h = FrameHeader.decode(acc, consumed) ?: run { consumed++; continue }
+                    val h = FrameHeader.decode(acc, consumed)
+                    if (h == null) {
+                        // 头无效：跳一个字节重新同步
+                        consumed += 1
+                        continue
+                    }
                     pending = h
                     need = h.payloadLength
                     consumed += USBD.HEADER_SIZE
                 }
                 if (acc.size - consumed < need) break
-                frames.add(pending!! to acc.copyOfRange(consumed, consumed + need))
+                frames.add(pending to acc.copyOfRange(consumed, consumed + need))
                 consumed += need
                 pending = null
                 need = 0

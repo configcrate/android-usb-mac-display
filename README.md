@@ -23,27 +23,78 @@ USB 是有线独占，P99 与 P50 差距很小，手感才是"跟手"的。
 
 ## 快速开始
 
+> 第一次用请直接看 **[新手教程 docs/00-quickstart.md](docs/00-quickstart.md)**，一页讲完从插线到出画面。
+
+### 一键：Mac 端体检 + 缺什么自动装
+
 ```bash
-# 1. 先跑协议检查（不需要任何硬件/编译器）
+git clone <本仓库> android-usb-mac-display && cd android-usb-mac-display
+
+bash macos/scripts/usbdisplay-doctor.sh          # 体检，缺工具会问你要不要装
+bash macos/scripts/usbdisplay-doctor.sh --yes    # 无人值守：缺什么直接装
+bash macos/scripts/usbdisplay-doctor.sh --check  # 只体检，不动系统
+```
+
+检查七项：macOS 版本 / Node.js / Xcode CLT(`swift`) / 手机连线 / `adb` / 协议自检 / Mac 端能否构建，
+最后给出「还差几项、逐条怎么处理」。
+
+### 一键：投屏
+
+```bash
+bash macos/scripts/usbdisplay-run.sh --fps 30    # 参数会透传给 usbdisplayctl
+```
+
+### 手机端要装 App 吗？要
+
+手机端必须装一个约 500 KB 的 **「USB 副屏」APK**，负责收流 → 硬解 → 上屏 → 回传触摸。装好不用手动开，
+Mac 一启动就会通过 AOA 自动把它拉起。
+
+**目前没有上架任何应用商店**（Google Play / 国内商店都没有），分发方式是自己装 APK：
+
+```bash
+bash macos/scripts/build-android-apk.sh --install   # 在 Mac 上构建并 adb install
+```
+
+或直接用 CI 构建好的产物（不用装 Android SDK）：每次推送 `main` 都会产出 `usbdisplay-debug-apk`，
+在流水线页面下载 `app-debug.apk` 传到手机安装即可。详见 [新手教程 §3](docs/00-quickstart.md)。
+
+> 上不了架的原因：Mac 侧依赖 `CGVirtualDisplay` 私有 API（上架必被拒），手机侧是 AOA accessory 开发者形态。
+> 想公开分发需先补完 AOA 真机验证 + 切到 DriverKit 虚拟显示驱动。
+
+### 不用手机、不用编译也能验证的部分
+
+```bash
+make check                                        # 13 项协议测试 + 17 项一致性检查
 node protocol/tests/test_protocol.js
 node protocol/tests/check_consistency.js
+```
 
-# 2. Mac 端环境自检
+### 手动分步（想自己控制每一步时）
+
+```bash
+# Mac 端
 cd macos && swift build
 swift run usbdisplayctl doctor
-
-# 3. Mac 端启动投屏
 swift run usbdisplayctl run --width 1920 --height 1080 --fps 60
 
-# 4. Android 端
+# Android 端（gradle wrapper 已入库，无需预装 Gradle；首跑会下载 Gradle 8.7）
 cd android && ./gradlew :app:installDebug
-# 插上 USB 线，App 会自动被拉起
 ```
+
+## 常用命令
+
+| 命令 | 作用 |
+|------|------|
+| `make doctor` | Mac 端一键体检，可自动补装缺失工具 |
+| `make run` | 一键投屏 |
+| `make apk` / `make apk-install` | 构建手机端 APK；带 `-install` 会 adb 装到手机 |
+| `make check` | 不依赖硬件的全部检查（CI 用这个） |
 
 ## 文档
 
 | 文档 | 内容 |
 |------|------|
+| [docs/00-quickstart.md](docs/00-quickstart.md) | **新手教程**：从插线到出画面，含一键脚本与排错表 |
 | [docs/01-usb-wire-protocol.md](docs/01-usb-wire-protocol.md) | USB 线协议：帧头、分包规则、握手序列 |
 | [docs/02-architecture.md](docs/02-architecture.md) | 端到端架构、延迟预算、为什么用 Bulk 而非 Iso |
 | [docs/03-macos-virtual-display.md](docs/03-macos-virtual-display.md) | 虚拟显示器三条路线对比与选型建议 |
@@ -74,6 +125,10 @@ android/.../transport/FrameProtocol.kt            ← Kotlin
 │       ├── test_protocol.js    编解码 / 分包 / 错位恢复测试
 │       └── check_consistency.js 三端常量一致性检查
 ├── macos/                      Mac 端（Swift Package）
+│   ├── scripts/                一键脚本（体检 / 投屏 / 构建 APK）
+│   │   ├── usbdisplay-doctor.sh      环境体检，缺什么自动装
+│   │   ├── usbdisplay-run.sh         一键编译 + 投屏
+│   │   └── build-android-apk.sh      构建 / 安装手机端 APK
 │   └── Sources/
 │       ├── USBDisplayCore/
 │       │   ├── FrameProtocol.swift   协议编解码
@@ -85,7 +140,8 @@ android/.../transport/FrameProtocol.kt            ← Kotlin
 │       │   ├── InputInjector.swift   触摸 → CGEvent
 │       │   └── DisplayLinkSession.swift  会话编排 + 自适应码率
 │       └── usbdisplayctl/             CLI 入口
-└── android/                    Android 端（Gradle）
+└── android/                    Android 端（Gradle，wrapper 已入库）
+    ├── gradlew                 无需预装 Gradle
     └── app/src/main/java/dev/configcrate/usbdisplay/
         ├── transport/          USB 接收 + 协议 + 回传
         ├── decode/             MediaCodec 低延迟解码
@@ -112,6 +168,7 @@ android/.../transport/FrameProtocol.kt            ← Kotlin
 ## 已知限制
 
 - **CGVirtualDisplay 是私有 API**，无法上架 App Store。生产级方案需 DriverKit 虚拟显示驱动（需向 Apple 申请权限，周期数周）。默认使用 ScreenCaptureKit 采集主屏，零安装摩擦。
+- **手机端 APK 未上架任何应用商店**（Google Play / 国内商店均无）。当前分发方式是 CI 产物或本地构建后 adb 安装，属于开发者自用形态。正式公开分发的前提是：AOA 传输层真机验证补完 + 换用 DriverKit 虚拟显示驱动。
 - **部分厂商 ROM 移除了 AOA 支持**（尤其国产定制系统）。已把传输层抽象成 `FrameSink`，便于切换到 ADB 隧道兜底。
 - **AOA 的 IOKit 调用与 Android 侧的 `ParcelFileDescriptor` 读写**目前是结构化骨架，需在真机上补完具体调用并验证。
 - 分辨率超过 1080p60 时 USB 2.0 带宽可能吃紧，需 USB 3.x 或降低帧率。

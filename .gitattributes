@@ -1,0 +1,14 @@
+# 保持行尾一致，避免脚本在 macOS/Linux 上因 CRLF 报 "bad interpreter"
+* text=auto eol=lf
+
+# 这些必须保持 LF，且带可执行位
+*.sh        text eol=lf
+gradlew     text eol=lf
+*.bash      text eol=lf
+
+# 二进制产物不要做行尾转换
+*.apk       binary
+*.jar       binary
+*.aab       binary
+*.keystore  binary
+*.png       binary
